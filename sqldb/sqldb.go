@@ -95,31 +95,3 @@ func EncodeRows(rows [][]interface{}, cols []*sql.ColumnType) ([]byte, error) {
 
 	return buffer, nil
 }
-
-func encodeValues(enc *cbor.Encoder, row []interface{}, ty sql.ColumnType, i int) error {
-	switch ty.DatabaseTypeName() {
-	case "BOOL":
-		enc.WriteBool(row[i].(bool))
-	case "INT":
-		enc.WriteInt8(row[i].(int8))
-	case "TEXT":
-		enc.WriteString(row[i].(string))
-	default:
-		enc.WriteByteArray(row[i].([]byte))
-	}
-	return nil
-}
-
-func encodeSizer(enc *cbor.Sizer, row []interface{}, ty sql.ColumnType, i int) error {
-	switch ty.DatabaseTypeName() {
-	case "BOOL":
-		enc.WriteBool(row[i].(bool))
-	case "INT":
-		enc.WriteInt8(row[i].(int8))
-	case "TEXT":
-		enc.WriteString(row[i].(string))
-	default:
-		enc.WriteByteArray(row[i].([]byte))
-	}
-	return nil
-}
