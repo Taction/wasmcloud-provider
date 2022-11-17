@@ -45,6 +45,17 @@ type LinkDefinition struct {
 	Values     map[string]string `msgpack:"values"`
 }
 
+func (l LinkDefinition) ActorEntity() WasmCloudEntity {
+	return WasmCloudEntity{PublicKey: l.ActorID}
+}
+
+func (l LinkDefinition) ProviderEntity() WasmCloudEntity {
+	return WasmCloudEntity{PublicKey: l.ProviderID, ContractID: l.ContractID, LinkName: l.LinkName}
+}
+func (l LinkDefinition) ToActorConfig() ActorConfig {
+	return ActorConfig{l.ActorID, l.Values}
+}
+
 type ActorConfig struct {
 	ActorID     string
 	ActorConfig map[string]string
@@ -64,6 +75,7 @@ type Invocation struct {
 	ID            string          `msgpack:"id"`
 	EncodedClaims string          `msgpack:"encoded_claims"`
 	HostID        string          `msgpack:"host_id"`
+	ContentLength uint64          `msgpack:"content_length"`
 }
 
 func (i *Invocation) EncodeClaims(hostData HostData, guid string) error {
@@ -98,8 +110,8 @@ func (i *Invocation) EncodeClaims(hostData HostData, guid string) error {
 		},
 		ID: guid,
 		Wascap: Wascap{
-			TargetURL: "wasmbus://MBHGYVWJ24OQFNXTBSBMH4HSZWZ7DSRE3YW4QGG5QCQKRTBSBY2WQ4HY/" + i.Operation,
-			OriginURL: "wasmbus://wasmcloud/httpserver/default/VBAG4WSBM6Y75EFWXV2BAGBP5NGEC36EAL4UOQEJAK5FKZ22UTP63FJV",
+			TargetURL: fmt.Sprintf("wasmbus://%s/%s", i.Target.PublicKey, i.Operation),              //MBHGYVWJ24OQFNXTBSBMH4HSZWZ7DSRE3YW4QGG5QCQKRTBSBY2WQ4HY
+			OriginURL: fmt.Sprintf("wasmbus://wasmcloud/httpserver/default/%s", i.Origin.PublicKey), //VBAG4WSBM6Y75EFWXV2BAGBP5NGEC36EAL4UOQEJAK5FKZ22UTP63FJV
 		},
 	}
 
@@ -167,6 +179,7 @@ type HostData struct {
 	InvocationSeed     string            `json:"invocation_seed"`
 	InstanceID         string            `json:"instance_id"`
 	LinkDefinitions    []LinkDefinition  `json:"link_definitions"`
+	ConfigJson         string            `json:"config_json"`
 }
 
 type Topics struct {
@@ -193,7 +206,7 @@ type HealthCheck struct {
 
 type WasmcloudProvider struct {
 	cancel            context.CancelFunc
-	Links             chan ActorConfig
+	Links             chan LinkDefinition
 	Shutdown          chan struct{}
 	NatsConnection    *nats.Conn
 	HostData          HostData
@@ -237,8 +250,8 @@ func Init(ctx context.Context) (WasmcloudProvider, error) {
 	p.NatsConnection = nc
 	p.HostData = hostData
 	p.TopicData = hostData.LatticeTopics()
-	p.Links = make(chan ActorConfig)
-	p.Shutdown = make(chan struct{})
+	p.Links = make(chan LinkDefinition, 10)
+	p.Shutdown = make(chan struct{}, 1)
 
 	p.subToNats()
 	return p, nil
@@ -294,7 +307,7 @@ func (p *WasmcloudProvider) subToNats() {
 				log.Error(err)
 				return
 			}
-			p.Links <- ActorConfig{linkdef.ActorID, linkdef.Values}
+			p.Links <- linkdef //ActorConfig{linkdef.ActorID, linkdef.Values}
 		})
 
 	p.NatsConnection.Subscribe(p.HostData.LatticeTopics().LATTICE_SHUTDOWN,
